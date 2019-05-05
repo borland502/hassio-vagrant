@@ -5,10 +5,3 @@ hostname: hass
 post_up_message: Hass.io starting... wait a couple of minutes!
 box: bento/ubuntu-18.10
 bridge: hassio
-keep_config: true
-shares:
-  addons: /usr/share/hassio/addons/local
-  backup: /usr/share/hassio/backup
-  config: /usr/share/hassio/homeassistant
-  share: /usr/share/hassio/share
-  ssl: /usr/share/hassio/ssl

@@ -82,9 +82,7 @@ module HassioCommunityAddons
         machine_provider_hyperv machine
         machine_provider_virtualbox machine
         machine_provider_vmware machine
-        machine_shares machine
         machine_provision machine
-        machine_cleanup_on_destroy machine unless @config['keep_config']
       end
     end
 
@@ -146,18 +144,6 @@ module HassioCommunityAddons
       end
     end
 
-    def machine_shares(machine)
-      @config['shares'].each do |src, dst|
-        machine.vm.synced_folder(
-          src,
-          dst,
-          create: true,
-          type: 'rsync',
-          SharedFoldersEnableSymlinksCreate: false
-        )
-      end
-    end
-
     # rubocop:enable Style/MultilineTernaryOperator
     # Configures a VM's provisioning
     #
@@ -165,31 +151,6 @@ module HassioCommunityAddons
     def machine_provision(machine)
       machine.vm.provision 'fix-no-tty', type: 'shell' do |shell|
         shell.path = 'provision.sh'
-      end
-    end
-
-    # Define cleanup command based on OS
-    def os_cleanup_task
-      config_directory = File.join(File.dirname(__FILE__), 'config')
-      if ::Vagrant::Util::Platform.windows?
-        "gci '#{config_directory}' -depth 1 " \
-        ' -exclude ".gitkeep" | Remove-Item -recurse'
-      else
-        "find '#{config_directory}' -mindepth 1 -maxdepth 1" \
-        ' -not -name ".gitkeep" -exec rm -rf {} \;'
-      end
-    end
-
-    # Defines a VM cleanup task when destroying the VM
-    #
-    # @param [Vagrant::Config::V2::Root] machine Vagrant VM root config
-    def machine_cleanup_on_destroy(machine)
-      machine.trigger.after :destroy do |trigger|
-        trigger.name = 'Cleanup'
-        trigger.info = 'Cleaning up Home Assistant configuration'
-        trigger.run = {
-          inline: os_cleanup_task
-        }
       end
     end
 

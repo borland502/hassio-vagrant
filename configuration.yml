@@ -1,11 +1,11 @@
 ---
-memory: 1024
+memory: 2048
 cpus: 2
-hostname: hassio
+hostname: hass
 post_up_message: Hass.io starting... wait a couple of minutes!
-box: ubuntu/bionic64
-bridge: ~
-keep_config: false
+box: bento/ubuntu-18.10
+bridge: hassio
+keep_config: true
 shares:
   addons: /usr/share/hassio/addons/local
   backup: /usr/share/hassio/backup

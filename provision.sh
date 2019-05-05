@@ -19,17 +19,15 @@ readonly HASSIO_INSTALLER="https://raw.githubusercontent.com/home-assistant/hass
 readonly DOCKER_DOWNLOAD="https://download.docker.com/linux"
 readonly NETDATA_INSTALLER="https://my-netdata.io/kickstart-static64.sh"
 readonly APT_REQUIREMENTS=(
-    apparmor-utils
     apt-transport-https
     avahi-daemon
     ca-certificates
     curl
     dbus
-    dkms
     jq
-    network-manager
     socat
     software-properties-common
+    apparmor-utils
 )
 
 # ==============================================================================
@@ -72,7 +70,7 @@ install_docker() {
     apt-get update
     apt-get install -y docker-ce
 
-    usermod -aG docker ubuntu
+    usermod -aG docker vagrant
 }
 
 # ------------------------------------------------------------------------------
@@ -137,11 +135,16 @@ install_hassio() {
 #   None
 # ------------------------------------------------------------------------------
 show_post_up_message() {
-    local ip_public
-    local ip_private
-    
-    ip_public=$(ip -4 -o addr s enp0s9|head -1|cut -d\  -f 7|cut -d/ -f 1)
-    ip_private=$(ip -4 -o addr s enp0s8|head -1|cut -d\  -f 7|cut -d/ -f 1)
+    local ip_addresses
+    ip_addresses=()
+    for i in $(basename -a /sys/class/net/*); do
+        if [[ "$i" != "lo" ]] &&
+           [[ "$i" != "docker0" ]] &&
+           [[ "$i" != "hassio" ]]
+        then
+            ip_addresses+=($(ip -f inet -o addr show "${i}" | cut -d\  -f 7 | cut -d/ -f 1))
+        fi
+    done
 
     echo '====================================================================='
     echo ' Community Hass.io Add-ons: Vagrant'
@@ -149,17 +152,14 @@ show_post_up_message() {
     echo ' Hass.io is installed & started! It may take a couple of minutes'
     echo ' before it is actually responding/available.'
     echo ''
-    echo ' Home Assistant is running on the following links:'
-    echo "  - http://${ip_private}:8123"
-    echo "  - http://${ip_public}:8123"
+    echo ' Home Assitant is running on the following links:'
+    for i in "${ip_addresses[@]}"; do echo "  - http://${i}:8123" ; done
     echo ''
     echo ' Portainer is running on the following links:'
-    echo "  - http://${ip_private}:9000"
-    echo "  - http://${ip_public}:9000"
+    for i in "${ip_addresses[@]}"; do echo "  - http://${i}:9000" ; done
     echo ''
     echo ' Netdata is providing awesome stats on these links:'
-    echo "  - http://${ip_private}:19999"
-    echo "  - http://${ip_public}:19999"
+    for i in "${ip_addresses[@]}"; do echo "  - http://${i}:19999" ; done
     echo '====================================================================='
 }
 

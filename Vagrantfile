@@ -41,12 +41,6 @@ module HassioCommunityAddons
   class Vagrant
     # Class constructor
     def initialize
-      unless `vboxmanage list extpacks`.include? \
-        'Oracle VM VirtualBox Extension Pack'
-        raise ::Vagrant::Errors::VagrantError.new, \
-              'Could not find VirtualBox Extension Pack! Did you install it?'
-      end
-
       @config = YAML.load_file(
         File.join(File.dirname(__FILE__), 'configuration.yml')
       )
@@ -69,25 +63,6 @@ module HassioCommunityAddons
       confirm(message, default)
     end
 
-    # Check for addon on Windows for NFS as SMB is slow
-    # rubocop:disable Metrics/MethodLength
-    def require_nfs_plugin
-      return if ::Vagrant.has_plugin?('vagrant-winnfsd')
-
-      print "It is recommended to use the following plugin on Windows \
-(SMB is slow): vagrant-winnfsd\n"
-      if confirm 'Shall I go ahead and install it?', true
-        raise ::Vagrant::Errors::VagrantError.new, 'Plugin Install failed' \
-          unless system 'vagrant plugin install vagrant-winnfsd'
-
-        print "Restarting Vagrant to reload plugin changes...\n"
-        system 'vagrant ' + ARGV.join(' ')
-        exit! $CHILD_STATUS.exitstatus
-      else
-        print "Recommended plugin missing, continuing with SMB...\n" \
-      end
-    end
-
     # rubocop:enable Metrics/MethodLength
     # Configures generic Vagrant options
     #
@@ -104,7 +79,9 @@ module HassioCommunityAddons
     def machine(config, name)
       config.vm.define name do |machine|
         machine_config machine
+        machine_provider_hyperv machine
         machine_provider_virtualbox machine
+        machine_provider_vmware machine
         machine_shares machine
         machine_provision machine
         machine_cleanup_on_destroy machine unless @config['keep_config']
@@ -141,10 +118,33 @@ module HassioCommunityAddons
         vbox.customize ['modifyvm', :id, '--usb', 'on', '--usbehci', 'on']
       end
     end
-    # rubocop:enable Metrics/MethodLength
-    # Configures a VM's shares
+
+    # Configures the VMware provider
     #
     # @param [Vagrant::Config::V2::Root] machine Vagrant VM root config
+    def machine_provider_vmware(machine)
+      %w(vmware_fusion vmware_workstation).each do |vmware|
+        machine.vm.provider vmware do |vmw|
+          vmw.vmx['displayName'] = @config['hostname']
+          vmw.vmx['memsize'] = @config['memory']
+          vmw.vmx['numvcpus'] = @config['cpus']
+        end
+      end
+    end
+
+    # Configures the HyperV provider
+    #
+    # @param [Vagrant::Config::V2::Root] machine Vagrant VM root config
+    def machine_provider_hyperv(machine)
+      machine.vm.provider :hyperv do |hyperv, override|
+        override.vm.synced_folder ".", "/vagrant", disabled: true
+        hyperv.vmname = @config['hostname']
+        hyperv.memory = @config['memory']
+        hyperv.cpus = @config['cpus']
+        hyperv.enable_virtualization_extensions = false
+        hyperv.linked_clone = true
+      end
+    end
 
     def machine_shares(machine)
       @config['shares'].each do |src, dst|
@@ -152,18 +152,10 @@ module HassioCommunityAddons
           src,
           dst,
           create: true,
-          type: share_type,
+          type: 'rsync',
           SharedFoldersEnableSymlinksCreate: false
         )
       end
-    end
-
-    # Determines the type of filesharing. SMB for windows (without nfs plugin)
-    # else NFS.
-    # rubocop:disable Style/MultilineTernaryOperator
-    def share_type
-      ::Vagrant::Util::Platform.windows? &&
-        !::Vagrant.has_plugin?('vagrant-winnfsd') ? 'smb' : 'nfs'
     end
 
     # rubocop:enable Style/MultilineTernaryOperator
@@ -204,7 +196,6 @@ module HassioCommunityAddons
     # Run this thing!
     def run
       ::Vagrant.configure('2') do |config|
-        require_nfs_plugin if ::Vagrant::Util::Platform.windows?
         vagrant_config(config)
         machine(config, 'hassio')
       end
